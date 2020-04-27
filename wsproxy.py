@@ -3,11 +3,12 @@ import asyncio
 import signal
 import logging
 import os
+import ssl
 from urllib.parse import unquote
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 class WebsocketProxy():
-    logger = logging.getLogger('websockets')
-    logger.setLevel(logging.INFO)
 
     def __init__(self):
         self.connections = {}
@@ -24,15 +25,32 @@ class WebsocketProxy():
             await self.connections[server].send(message)
     
     async def register(self, websocket, url):
-        client = await websockets.connect(url)
+        logger.info("The url I am about to connect to is {}".format(url))
+        try:
+            client = await websockets.connect(url)
+        except ssl.SSLCertVerificationError:
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+            client = await websockets.connect(url, ssl=ssl_context)
         self.connections[websocket] = client
     
     async def unregister(self, websocket):
-        await self.connection[websocket].close()
+        await self.connections[websocket].close()
         del self.connections[websocket]
 
     async def handler(self, websocket, path):
-        url = unquote(path.split("?")[1].split("=")[1])
+        url = unquote(path.split("?")[1])
+        if 'url' not in url:
+            msg = ("Please specify a 'url' parameter in the URL path. "
+                   "eg: host:8864?url=echo.websocket.org")
+            raise ValueError(msg)
+        if "&" in url:
+            urls = url.split("&")
+            for url in urls:
+                if 'url' in url:
+                    break
+        url = url.split("=")[1]
         await self.register(websocket, url)
         try:
             consumer_task = asyncio.ensure_future(self.consumer_handler(websocket, path))
@@ -51,7 +69,7 @@ class WebsocketProxy():
         #os.kill(pid, signal.SIGTERM)
 
     async def server(self, stop):
-        async with websockets.serve(self.handler,"127.0.0.1", 8764) as server:
+        async with websockets.serve(self.handler,"0.0.0.0", 8764) as server:
             self.server = server
             await stop
 
