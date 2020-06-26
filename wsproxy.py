@@ -43,7 +43,7 @@ class WebsocketProxy():
         url = unquote(path.split("?")[1])
         if 'url' not in url:
             msg = ("Please specify a 'url' parameter in the URL path. "
-                   "eg: host:8764?url=echo.websocket.org")
+                   "eg: host:8764?url=wss://echo.websocket.org")
             raise ValueError(msg)
         if "&" in url:
             urls = url.split("&")
